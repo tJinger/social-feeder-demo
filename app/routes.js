@@ -64,7 +64,6 @@ module.exports = (app) => {
   })
 
   app.get('/share/:postId', isLoggedIn, (req, res) => {
-    console.log(req.params.postId)
     res.render('share.ejs', {
       postId: req.params.postId,
       message: req.flash('error')
@@ -75,18 +74,18 @@ module.exports = (app) => {
     res.redirect('/timeline')
   })
 
-  app.get('/reply/:postId', isLoggedIn, (req, res) => {
-    console.log(req.params.postId)
+  app.get('/reply/:postId', isLoggedIn, then (async (req, res) => {
+    let post = await Feed.promise.findOne({'id': req.params.postId})
     res.render('reply.ejs', {
-      postId: req.params.postId,
+      post: post,
       message: req.flash('error')
     })
-  })
+  }))
 
   app.post('/reply/:postId', isLoggedIn, then (async (req, res) => {
     let reply = req.body.reply
-    let id = req.params.postId.split('-')[1]
-    let network = req.params.postId.split('-')[0]
+    let post = await Feed.promise.findOne({'id': req.params.postId})
+    let network = post.network.icon
 
     if (network === 'twitter') {
       let twitterClient = new Twitter({
@@ -95,18 +94,16 @@ module.exports = (app) => {
         access_token_key: req.user.twitter.token,
         access_token_secret: req.user.twitter.tokenSecret
       })
-      console.log(req.user.twitter.username + ' ' + reply)
-      console.log(id + ":" + network)
       await twitterClient.promise.post('statuses/update', {
         status: '@' + req.user.twitter.username + ' ' + reply,
-        in_reply_to_status_id: id
+        in_reply_to_status_id: post.id
       })
     }
 
     if (network === 'facebook') {
-      let url = 'https://graph.facebook.com/' + id + '/comments'
+      let url = 'https://graph.facebook.com/' + post.id + '/comments'
       let options = {
-        access_token: req.user[network].token,
+        access_token: req.user.facebook.token,
         message: reply
       }
       await request.promise.post({url: url, qs: options})
@@ -146,35 +143,12 @@ module.exports = (app) => {
       };
       await request.promise.post({url: url, qs: options})
     }
-    if (network === 'google+') {
-      oauth2Client.setCredentials({
-        access_token: user.google.token,
-        refresh_token: user.google.refreshToken
-      })
-      let moment = {
-        type: 'http://schemas.google.com/AddActivity',
-        startDate: new Date(),
-        target: {
-          id: 'replacewithuniqueidforaddtarget',
-          type: 'http://schema.org/CreativeWork',
-          description: 'The description for the activity',
-          name: 'An example of AddActivity'
-        }
-      }
-     try {await googlePlus.moments.insert({
-        userId: 'me',
-        collection: 'vault'
-      }, moment).withAuthClient(oauth2Client)
-      } catch (e) {
-         console.log(e)
-       }
-    } 
     res.redirect('/timeline')
   }))
 
   app.post('/like/:id', isLoggedIn, then(async (req, res) => {
-    let id = req.params.id.split('-')[1]
-    let network = req.params.id.split('-')[0]
+    let post = await Feed.promise.findOne({'id': req.params.id})
+    let network = post.network.icon
     let user = req.user
 
     if (network === 'twitter') {
@@ -184,10 +158,10 @@ module.exports = (app) => {
         access_token_key: req.user.twitter.token,
         access_token_secret: req.user.twitter.tokenSecret
       })
-      await twitterClient.promise.post('favorites/create', {id})
+      await twitterClient.promise.post('favorites/create', {id: req.params.id})
     }
     if (network === 'facebook') {
-      let url = 'https://graph.facebook.com/' + id + '/likes'
+      let url = 'https://graph.facebook.com/' + req.params.id + '/likes'
       let options = {
         access_token: user.facebook.token
       };
@@ -197,8 +171,8 @@ module.exports = (app) => {
   }))
 
   app.post('/unlike/:id', isLoggedIn, then (async (req, res) => {
-    let id = req.params.id.split('-')[1]
-    let network = req.params.id.split('-')[0]
+    let post = await Feed.promise.findOne({'id': req.params.id})
+    let network = post.network.icon
     let user = req.user
 
     if (network === 'twitter') {
@@ -208,13 +182,13 @@ module.exports = (app) => {
         access_token_key: req.user.twitter.token,
         access_token_secret: req.user.twitter.tokenSecret
       })
-      await twitterClient.promise.post('favorites/destroy', {id})
+      await twitterClient.promise.post('favorites/destroy', {id: req.params.id})
     }
     
     if(network === 'facebook') {
-      let url = 'https://graph.facebook.com/' + id + '/likes'
+      let url = 'https://graph.facebook.com/' + req.params.id + '/likes'
       let options = {
-        access_token: user[network].token
+        access_token: user.facebook.token
       };
       // Send the request
       await request.promise.del({url: url, qs: options})
@@ -247,7 +221,7 @@ module.exports = (app) => {
   }))
 
   let scopes = {
-    facebook: {scope: ['email', 'publish_actions', 'read_stream']},
+    facebook: {scope: ['email', 'publish_actions', 'read_stream', 'user_photos', 'user_likes']},
     twitter: {scope: 'email'},
     google: {
       scope: ['email', 'profile', 'openid',
@@ -295,77 +269,96 @@ module.exports = (app) => {
   }))
 
   async function getTimeline(req, res, next) { 
-    //Get Tweets:
-    let twitterClient = new Twitter({
-      consumer_key: twitterConfig.consumerKey,
-      consumer_secret: twitterConfig.consumerSecret,
-      access_token_key: req.user.twitter.token,
-      access_token_secret: req.user.twitter.tokenSecret
-    })
-    let [tweets] = await twitterClient.promise.get('statuses/user_timeline')
-    tweets = tweets.map(tweet => {
-      return {
-        id : tweet.id_str,
-        image: tweet.user.profile_image_url,
-        text: tweet.text,
-        name: tweet.user.name,
-        username: '@' + tweet.user.screen_name,
-        liked: tweet.favorited,
-        network: networks.twitter,
-        date: tweet.create_at
-      }
-    })
-
-    //Get facebook feeds:
     let user = req.user
-    let url = `https://graph.facebook.com/${user['facebook'].id}/feed`
-    let options = {
-      access_token: user['facebook'].token,
-      limit: 5
+    let allFeeds = []
+    //Get Tweets:
+    if (req.user.twitter.token) {
+      let twitterClient = new Twitter({
+        consumer_key: twitterConfig.consumerKey,
+        consumer_secret: twitterConfig.consumerSecret,
+        access_token_key: req.user.twitter.token,
+        access_token_secret: req.user.twitter.tokenSecret
+      })
+      let [tweets] = await twitterClient.promise.get('statuses/user_timeline')
+      tweets = tweets.map(tweet => {
+        return {
+          id : tweet.id_str,
+          image: tweet.user.profile_image_url,
+          text: tweet.text,
+          name: tweet.user.name,
+          username: '@' + tweet.user.screen_name,
+          liked: tweet.favorited,
+          network: networks.twitter,
+          date: new Date(Date.parse(tweet.created_at))
+        }
+      })
+      allFeeds.push(tweets) 
     }
-    let [, fbFeeds] = await request.promise.get({url:url, qs: options})
-    fbFeeds = JSON.parse(fbFeeds).data
-    fbFeeds = fbFeeds.map(feed => {
-      return {
-        id: feed.id,
-        image: feed.picture? feed.picture : '/assets/icons/flow.jpg',
-        text: feed.message,
-        name: feed.name ? feed.name : '',
-        username: feed.from.name,
-        liked: feed.likes ?  body.find(feed.likes.data, 'id', user.facebook.id) : false,
-        network: networks.facebook,
-        date: feed.created_time
+    //Get facebook feeds:
+    if (user.facebook.token) {
+      let url = 'https://graph.facebook.com/' +user.facebook.id +'/feed'
+      let options = {
+        access_token: user.facebook.token,
+        limit: 20
       }
-    }) 
-
+      let [, fbFeeds] = await request.promise.get({url:url, qs: options})
+      fbFeeds = JSON.parse(fbFeeds).data
+      fbFeeds = fbFeeds.map(feed => {
+        return {
+          id: feed.id,
+          image: `//graph.facebook.com/${user['facebook'].id}/picture`,
+          text: feed.message,
+          name: feed.name ? feed.name : '',
+          username: feed.from.name,
+          liked: feed.likes ?  body.find(feed.likes.data, 'id', user.facebook.id) : false,
+          network: networks.facebook,
+          date: new Date(Date.parse(feed.created_time))
+        }
+      }) 
+      allFeeds.push(fbFeeds) 
+    }
     //Get Google+ feeds:
-    oauth2Client.setCredentials({
-      access_token: user.google.token,
-      refresh_token: user.google.refreshToken
-    })
+    if (user.google.token) {
+      oauth2Client.setCredentials({
+        access_token: user.google.token,
+        refresh_token: user.google.refreshToken
+      })
 
-    let [plusFeeds] = await googlePlus.activities.promise.list({
-      userId: 'me',
-      collection: 'public',
-      maxResults:5,
-      auth: oauth2Client
-    })
-   // plusFeeds = JSON.parse(plusFeeds)
-    plusFeeds = plusFeeds.items.map(feed => {
-      return {
-        id: feed.id,
-        image: feed.actor.image.url? feed.actor.image.url : '/assets/icons/flow.jpg',
-        text: feed.object.content,
-        name: '',
-        username: feed.actor.displayName,
-        liked:  feed.favorited,
-        network: networks.google,
-        date: feed.published
-      }
-    })
+      let [plusFeeds] = await googlePlus.activities.promise.list({
+        userId: 'me',
+        collection: 'public',
+        maxResults:20,
+        auth: oauth2Client
+      })
+      plusFeeds = plusFeeds.items.map(feed => {
+        return {
+          id: feed.id,
+          image: feed.actor.image.url,
+          text: feed.object.content,
+          name: '',
+          username: feed.actor.displayName,
+          liked:  feed.favorited,
+          network: networks.google,
+          date: new Date(Date.parse(feed.published))
+        }
+      })
+      allFeeds.push(plusFeeds) 
+    } 
+    req.posts = _.flatten(await Promise.all(allFeeds)).sort((a, b)=>b.date - a.date).slice(0, 20)
 
-    let promises = [tweets, fbFeeds, plusFeeds]
-    req.posts = _.flatten(await Promise.all(promises)).sort((a, b)=>b.date - a.date)
+    await Feed.promise.remove({})
+    for (let post of req.posts) {
+      let feed = new Feed()
+      feed.id = post.id
+      feed.image = post.image
+      feed.text = post.text
+      feed.name = post.name
+      feed.username = post.username
+      feed.liked = post.liked
+      feed.network = post.network
+      feed.date = post.date
+      await feed.save()
+    }
     next()
   }
 }

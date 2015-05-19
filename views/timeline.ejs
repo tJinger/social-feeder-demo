@@ -28,21 +28,21 @@
 
     <% for(var post,i=0; post=posts[i]; i++) {%>
         <div class="row well">
-
-            <div class="col-xs-1">
+             <div class="col-xs-1">
                 <img src="<%= post.image %>"/>
             </div>
             <div class="col-lg-9">
                 <div class="row">
                     <p>
                         <strong><%= post.name %></strong> <%= post.username %><br>
-                        <%- post.text %>
+                        <%= post.text %><br>
+                        <%= post.date %>
                     </p>
                 </div>
                 <div class="row _icons">
-                    <i class="fa <%= post.liked ? "fa-thumbs-up" : "fa-thumbs-o-up" %> fa-2x _like" name="like<%= post.network.icon%>-<%= post.id %>"></i> 
-                    <a href="/reply/<%= post.network.icon %>-<%= post.id %>" class="fa fa-reply fa-2x"></a>
-                    <a href="/share/<%= post.network.icon %>-<%= post.id %>" class="fa fa-share-square-o fa-2x"></a>
+                    <i class="fa <%= post.liked ? "fa-thumbs-up" : "fa-thumbs-o-up" %> fa-2x _like" name="like<%= post.id %>"></i> 
+                    <a href="/reply/<%= post.id %>" class="fa fa-reply fa-2x"></a>
+                    <a href="/share/<%= post.id %>" class="fa fa-share-square-o fa-2x"></a>
                 </div>
             </div>
             <div class="col-xs-2">
