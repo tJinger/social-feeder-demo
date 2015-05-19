@@ -10,7 +10,8 @@ module.exports = [
       icon: 'linkedin',
       name: 'Linkedin',
       class: 'btn-primary'
-    }
+    },
+    date: ""
   },
   {
     id: 1,
@@ -23,7 +24,8 @@ module.exports = [
       icon: 'facebook',
       name: 'Facebook',
       class: 'btn-primary'
-    }
+    },
+    date: ""
   },
   {
     id: 1,
@@ -36,7 +38,8 @@ module.exports = [
       icon: 'google-plus',
       name: 'Google',
       class: 'btn-danger'
-    }
+    },
+    date: ""
   },
   {
     id: 1,
@@ -49,6 +52,7 @@ module.exports = [
       icon: 'twitter',
       name: 'Twitter',
       class: 'btn-info'
-    }
+    },
+    date: ""
   },
 ]

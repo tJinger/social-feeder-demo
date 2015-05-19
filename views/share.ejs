@@ -26,24 +26,8 @@
         <div class="alert alert-danger"><%= message %></div>
     <% } %>
 
-    <div class="row well">
-
-        <div class="col-xs-1">
-            <img src="<%= post.image %>"/>
-        </div>
-        <div class="col-lg-11">
-            <div class="row">
-                <p>
-                    <strong><%= post.name %></strong> <%= post.username %><br>
-                    <%- post.text %>
-                </p>
-            </div>
-        </div>
-
-    </div>
-
     <div class="row">
-        <form action="/share/<%= post.id %>" method="POST">
+        <form action="/share/<%= postId %>" method="POST">
             <div class="form-group">
                 <textarea name="share" class="form-control" rows="3" placeholder="Add a personal message..."></textarea>
             </div>
