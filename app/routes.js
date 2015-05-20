@@ -70,9 +70,27 @@ module.exports = (app) => {
     })
   })
 
-  app.post('/share/:postId', isLoggedIn, (req, res) => {
+  app.post('/share/:postId', isLoggedIn, then(async (req, res) => {
+    let post = await Feed.promise.findOne({'id': req.params.postId})
+    let network = post.network.icon
+    let message = req.body.share
+
+    if (message.length > 140) {
+      return req.flash('error', 'Share message is over 140 characters!')
+    }
+
+    if (network === 'twitter') {
+      let twitterClient = new Twitter({
+        consumer_key: twitterConfig.consumerKey,
+        consumer_secret: twitterConfig.consumerSecret,
+        access_token_key: req.user.twitter.token,
+        access_token_secret: req.user.twitter.tokenSecret
+      })
+      await twitterClient.promise.post('statuses/retweet/'+ post.id)
+    }
+
     res.redirect('/timeline')
-  })
+  }))
 
   app.get('/reply/:postId', isLoggedIn, then (async (req, res) => {
     let post = await Feed.promise.findOne({'id': req.params.postId})
